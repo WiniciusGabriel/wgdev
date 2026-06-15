@@ -1,48 +1,80 @@
 import { useEffect, useState } from 'react';
-import { pagamentosService, assinaturasService } from '../services';
-import type { Pagamento, Assinatura } from '../models';
-
-const METODOS = ['Cartão de Crédito', 'Cartão de Débito', 'PIX', 'Boleto'];
+import { pagamentosService, assinaturasService, usuariosService, planosService } from '../services';
 
 export default function PagamentosPage() {
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>([]);
-  const [assinaturas, setAssinaturas] = useState<Assinatura[]>([]);
-  const [form, setForm] = useState<Pagamento>({ idAssinatura: 0, valorPago: 0, dataPagamento: '', metodoPagamento: METODOS[0], idTransacaoGateway: '' });
-  const [editId, setEditId] = useState<number | null>(null);
+  const [pagamentos, setPagamentos] = useState<any[]>([]);
+  const [assinaturas, setAssinaturas] = useState<any[]>([]);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [planos, setPlanos] = useState<any[]>([]);
+
+  const [form, setForm] = useState<any>({ idAssinatura: '', valorPago: '', dataPagamento: '', metodoPagamento: 'Cartão de Crédito' });
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    const [p, a] = await Promise.all([
-      pagamentosService.getAll() as Promise<Pagamento[]>,
-      assinaturasService.getAll() as Promise<Assinatura[]>,
-    ]);
-    setPagamentos(p); setAssinaturas(a);
+    try {
+      const [pag, ass, usr, pla] = await Promise.all([
+        pagamentosService.getAll(),
+        assinaturasService.getAll(),
+        usuariosService.getAll(),
+        planosService.getAll()
+      ]);
+      setPagamentos(pag || []);
+      setAssinaturas(ass || []);
+      setUsuarios(usr || []);
+      setPlanos(pla || []);
+    } catch (error) {
+      console.error(error);
+    }
   };
+
   useEffect(() => { load(); }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const val = e.target.name === 'idAssinatura' || e.target.name === 'valorPago' ? Number(e.target.value) : e.target.value;
-    setForm({ ...form, [e.target.name]: val });
+    const { name, value } = e.target;
+    if (name === 'idAssinatura') {
+      const assSel = assinaturas.find(a => String(a.id) === String(value));
+      if (assSel) {
+        const idPlanoBuscar = assSel.idPlano || assSel.planoId;
+        const plano = planos.find(p => String(p.id) === String(idPlanoBuscar));
+        setForm({ ...form, idAssinatura: value, valorPago: plano ? plano.preco : '' });
+        return;
+      }
+    }
+    setForm({ ...form, [name]: value });
   };
-
-  const gerarTxId = () => `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
   const handleSalvar = async () => {
-    if (!form.idAssinatura || !form.dataPagamento || !form.valorPago) return alert('Preencha todos os campos');
+    if (!form.idAssinatura) return alert('Selecione uma assinatura');
     setLoading(true);
     try {
-      const payload = { ...form, idTransacaoGateway: form.idTransacaoGateway || gerarTxId() };
-      if (editId !== null) await pagamentosService.update(editId, { ...payload, id: editId });
-      else await pagamentosService.create(payload);
-      handleLimpar(); await load();
-    } finally { setLoading(false); }
+      // Salva tanto como valorPago quanto como valor para nunca dar traço na tabela
+      await pagamentosService.create({
+        ...form,
+        idAssinatura: form.idAssinatura,
+        assinaturaId: form.idAssinatura,
+        valor: Number(form.valorPago),
+        valorPago: Number(form.valorPago)
+      });
+      setForm({ idAssinatura: '', valorPago: '', dataPagamento: '', metodoPagamento: 'Cartão de Crédito' });
+      await load();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLimpar = () => { setForm({ idAssinatura: 0, valorPago: 0, dataPagamento: '', metodoPagamento: METODOS[0], idTransacaoGateway: '' }); setEditId(null); };
-  const handleEdit = (p: Pagamento) => { setForm(p); setEditId(p.id!); };
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Excluir?')) return;
-    await pagamentosService.delete(id); await load();
+  const getAssinaturaLabel = (idAssinatura: any) => {
+    const ass = assinaturas.find(a => String(a.id) === String(idAssinatura));
+    if (!ass) return 'Assinatura não encontrada';
+
+    const usrId = ass.idUsuario || ass.usuarioId;
+    const plnId = ass.idPlano || ass.planoId;
+
+    const usuario = usuarios.find(u => String(u.id) === String(usrId));
+    const plano = planos.find(p => String(p.id) === String(plnId));
+
+    return `${usuario ? (usuario.nomeCompleto || usuario.nome) : 'Usuário'} - ${plano ? plano.nome : 'Plano'}`;
   };
 
   return (
@@ -50,59 +82,58 @@ export default function PagamentosPage() {
       <h2 className="mb-4 fw-semibold">Pagamentos</h2>
       <div className="card mb-4 shadow-sm">
         <div className="card-body">
-          <h6 className="fw-semibold mb-3">Novo pagamento</h6>
+          <h6 className="fw-semibold mb-3">Novo Pagamento</h6>
           <div className="row g-3">
             <div className="col-md-3">
               <label className="form-label small fw-medium">Assinatura</label>
-              <select className="form-select" name="idAssinatura" value={form.idAssinatura || ''} onChange={handleChange}>
-                <option value="">Selecione</option>
-                {assinaturas.map(a => <option key={a.id} value={a.id}>Assinatura #{a.id}</option>)}
+              <select className="form-select" name="idAssinatura" value={form.idAssinatura} onChange={handleChange}>
+                <option value="">Selecione uma assinatura</option>
+                {assinaturas.map(a => <option key={a.id} value={a.id}>{getAssinaturaLabel(a.id)}</option>)}
               </select>
             </div>
             <div className="col-md-3">
               <label className="form-label small fw-medium">Valor Pago (R$)</label>
-              <input className="form-control" type="number" name="valorPago" min={0} step={0.01} value={form.valorPago} onChange={handleChange} />
+              <input className="form-control" type="number" name="valorPago" value={form.valorPago} onChange={handleChange} />
             </div>
             <div className="col-md-3">
-              <label className="form-label small fw-medium">Data Pagamento</label>
+              <label className="form-label small fw-medium">Data</label>
               <input className="form-control" type="date" name="dataPagamento" value={form.dataPagamento} onChange={handleChange} />
             </div>
             <div className="col-md-3">
-              <label className="form-label small fw-medium">Método de Pagamento</label>
+              <label className="form-label small fw-medium">Método</label>
               <select className="form-select" name="metodoPagamento" value={form.metodoPagamento} onChange={handleChange}>
-                {METODOS.map(m => <option key={m}>{m}</option>)}
+                <option value="Cartão de Crédito">Cartão de Crédito</option>
+                <option value="Pix">Pix</option>
+                <option value="Boleto">Boleto</option>
               </select>
             </div>
           </div>
-          <div className="mt-3">
-            <button className="btn btn-primary me-2" onClick={handleSalvar} disabled={loading}>Salvar</button>
-            <button className="btn btn-outline-secondary" onClick={handleLimpar}>Limpar</button>
-          </div>
+          <button className="btn btn-primary mt-3" onClick={handleSalvar} disabled={loading}>Salvar</button>
         </div>
       </div>
+
       <div className="card shadow-sm">
         <div className="card-body p-0">
           <table className="table table-hover mb-0">
             <thead className="table-light">
-              <tr><th>#</th><th>ASSINATURA</th><th>VALOR</th><th>DATA</th><th>MÉTODO</th><th>TX ID</th><th>AÇÕES</th></tr>
+              <tr>
+                <th>#</th>
+                <th>ASSINATURA</th>
+                <th>VALOR</th>
+                <th>DATA</th>
+                <th>AÇÕES</th>
+              </tr>
             </thead>
             <tbody>
-              {pagamentos.length === 0
-                ? <tr><td colSpan={7} className="text-center text-muted fst-italic py-4">Nenhum pagamento cadastrado</td></tr>
-                : pagamentos.map((p, i) => (
-                  <tr key={p.id}>
-                    <td>{i + 1}</td>
-                    <td>#{p.idAssinatura}</td>
-                    <td>R$ {Number(p.valorPago).toFixed(2)}</td>
-                    <td>{p.dataPagamento}</td>
-                    <td>{p.metodoPagamento}</td>
-                    <td><small className="text-muted">{p.idTransacaoGateway}</small></td>
-                    <td>
-                      <button className="btn btn-sm btn-outline-primary me-1" onClick={() => handleEdit(p)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(p.id!)}>Excluir</button>
-                    </td>
-                  </tr>
-                ))}
+              {pagamentos.map((pag, i) => (
+                <tr key={pag.id}>
+                  <td>{i + 1}</td>
+                  <td>{getAssinaturaLabel(pag.idAssinatura || pag.assinaturaId)}</td>
+                  <td>R$ {Number(pag.valorPago || pag.valor || 0).toFixed(2)}</td>
+                  <td>{pag.dataPagamento}</td>
+                  <td><button className="btn btn-sm btn-outline-danger" onClick={() => pagamentosService.delete(pag.id).then(load)}>Excluir</button></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

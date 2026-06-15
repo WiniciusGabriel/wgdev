@@ -1,16 +1,16 @@
 {
   "usuarios": [],
-  "categorias": [],
+  "trilhas": [],
   "cursos": [],
   "modulos": [],
   "aulas": [],
+  "categorias": [],
   "matriculas": [],
-  "progressoAulas": [],
-  "avaliacoes": [],
-  "trilhas": [],
-  "trilhasCursos": [],
+  "assinaturas": [],
+  "pagamentos": [],
   "certificados": [],
   "planos": [],
-  "assinaturas": [],
-  "pagamentos": []
+  "progressoAulas": [],
+  "certificadosAulas": [],
+  "trilhasCursos": []
 }

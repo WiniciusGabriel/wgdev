@@ -1,45 +1,77 @@
 import { useEffect, useState } from 'react';
 import { matriculasService, usuariosService, cursosService } from '../services';
-import type { Matricula, Usuario, Curso } from '../models';
 
 export default function MatriculasPage() {
-  const [matriculas, setMatriculas] = useState<Matricula[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [cursos, setCursos] = useState<Curso[]>([]);
-  const [form, setForm] = useState<Matricula>({ idUsuario: 0, idCurso: 0, dataMatricula: '' });
-  const [editId, setEditId] = useState<number | null>(null);
+  const [matriculas, setMatriculas] = useState<any[]>([]);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [cursos, setCursos] = useState<any[]>([]);
+
+  const [form, setForm] = useState<any>({ idUsuario: '', idCurso: '', dataMatricula: '' });
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    const [m, u, c] = await Promise.all([
-      matriculasService.getAll() as Promise<Matricula[]>,
-      usuariosService.getAll() as Promise<Usuario[]>,
-      cursosService.getAll() as Promise<Curso[]>,
-    ]);
-    setMatriculas(m); setUsuarios(u); setCursos(c);
+    try {
+      const [mat, usr, cur] = await Promise.all([
+        matriculasService.getAll(),
+        usuariosService.getAll(),
+        cursosService.getAll()
+      ]);
+      setMatriculas(mat || []);
+      setUsuarios(usr || []);
+      setCursos(cur || []);
+    } catch (error) {
+      console.error("Erro ao carregar matrículas:", error);
+    }
   };
+
   useEffect(() => { load(); }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const val = e.target.name === 'idUsuario' || e.target.name === 'idCurso' ? Number(e.target.value) : e.target.value;
-    setForm({ ...form, [e.target.name]: val });
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSalvar = async () => {
-    if (!form.idUsuario || !form.idCurso || !form.dataMatricula) return alert('Preencha todos os campos');
+    if (!form.idUsuario) return alert('Selecione um usuário');
+    if (!form.idCurso) return alert('Selecione um curso');
+
     setLoading(true);
     try {
-      if (editId !== null) await matriculasService.update(editId, { ...form, id: editId });
-      else await matriculasService.create(form);
-      handleLimpar(); await load();
-    } finally { setLoading(false); }
+      await matriculasService.create({
+        idUsuario: form.idUsuario,
+        usuarioId: form.idUsuario,
+        idCurso: form.idCurso,
+        cursoId: form.idCurso,
+        dataMatricula: form.dataMatricula || new Date().toISOString().split('T')[0]
+      });
+      setForm({ idUsuario: '', idCurso: '', dataMatricula: '' });
+      await load();
+    } catch (error) {
+      console.error("Erro ao salvar matrícula:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLimpar = () => { setForm({ idUsuario: 0, idCurso: 0, dataMatricula: '' }); setEditId(null); };
-  const handleEdit = (m: Matricula) => { setForm(m); setEditId(m.id!); };
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Excluir?')) return;
-    await matriculasService.delete(id); await load();
+  const handleDelete = async (id: any) => {
+    if (!window.confirm('Excluir matrícula?')) return;
+    try {
+      await matriculasService.delete(id);
+      await load();
+    } catch (error) {
+      console.error("Erro ao eliminar matrícula:", error);
+    }
+  };
+
+  const getUsuarioNome = (mat: any) => {
+    const idBuscar = mat.idUsuario || mat.usuarioId;
+    const usuario = usuarios.find(u => String(u.id) === String(idBuscar));
+    return usuario ? (usuario.nomeCompleto || usuario.nome) : 'Usuário não encontrado';
+  };
+
+  const getCursoNome = (mat: any) => {
+    const idBuscar = mat.idCurso || mat.cursoId;
+    const curso = cursos.find(c => String(c.id) === String(idBuscar));
+    return curso ? curso.nome : 'Curso não encontrado';
   };
 
   return (
@@ -47,20 +79,20 @@ export default function MatriculasPage() {
       <h2 className="mb-4 fw-semibold">Matrículas</h2>
       <div className="card mb-4 shadow-sm">
         <div className="card-body">
-          <h6 className="fw-semibold mb-3">Nova matrícula</h6>
+          <h6 className="fw-semibold mb-3">Nova Matrícula</h6>
           <div className="row g-3">
             <div className="col-md-4">
               <label className="form-label small fw-medium">Usuário</label>
-              <select className="form-select" name="idUsuario" value={form.idUsuario || ''} onChange={handleChange}>
+              <select className="form-select" name="idUsuario" value={form.idUsuario} onChange={handleChange}>
                 <option value="">Selecione um usuário</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nomeCompleto}</option>)}
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nomeCompleto || u.nome}</option>)}
               </select>
             </div>
             <div className="col-md-4">
               <label className="form-label small fw-medium">Curso</label>
-              <select className="form-select" name="idCurso" value={form.idCurso || ''} onChange={handleChange}>
+              <select className="form-select" name="idCurso" value={form.idCurso} onChange={handleChange}>
                 <option value="">Selecione um curso</option>
-                {cursos.map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}
+                {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
             <div className="col-md-4">
@@ -68,33 +100,36 @@ export default function MatriculasPage() {
               <input className="form-control" type="date" name="dataMatricula" value={form.dataMatricula} onChange={handleChange} />
             </div>
           </div>
-          <div className="mt-3">
-            <button className="btn btn-primary me-2" onClick={handleSalvar} disabled={loading}>Salvar</button>
-            <button className="btn btn-outline-secondary" onClick={handleLimpar}>Limpar</button>
-          </div>
+          <button className="btn btn-primary mt-3" onClick={handleSalvar} disabled={loading}>Salvar</button>
         </div>
       </div>
+
       <div className="card shadow-sm">
         <div className="card-body p-0">
           <table className="table table-hover mb-0">
             <thead className="table-light">
-              <tr><th>#</th><th>USUÁRIO</th><th>CURSO</th><th>DATA MATRÍCULA</th><th>AÇÕES</th></tr>
+              <tr>
+                <th>#</th>
+                <th>USUÁRIO</th>
+                <th>CURSO</th>
+                <th>DATA DE MATRÍCULA</th>
+                <th>AÇÕES</th>
+              </tr>
             </thead>
             <tbody>
-              {matriculas.length === 0
-                ? <tr><td colSpan={5} className="text-center text-muted fst-italic py-4">Nenhuma matrícula cadastrada</td></tr>
-                : matriculas.map((m, i) => (
-                  <tr key={m.id}>
+              {matriculas.length === 0 ? (
+                <tr><td colSpan={5} className="text-center text-muted fst-italic py-4">Nenhuma matrícula cadastrada</td></tr>
+              ) : (
+                matriculas.map((mat, i) => (
+                  <tr key={mat.id}>
                     <td>{i + 1}</td>
-                    <td>{usuarios.find(u => u.id === m.idUsuario)?.nomeCompleto || m.idUsuario}</td>
-                    <td>{cursos.find(c => c.id === m.idCurso)?.titulo || m.idCurso}</td>
-                    <td>{m.dataMatricula}</td>
-                    <td>
-                      <button className="btn btn-sm btn-outline-primary me-1" onClick={() => handleEdit(m)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(m.id!)}>Excluir</button>
-                    </td>
+                    <td className="fw-medium">{getUsuarioNome(mat)}</td>
+                    <td>{getCursoNome(mat)}</td>
+                    <td>{mat.dataMatricula || '-'}</td>
+                    <td><button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(mat.id)}>Excluir</button></td>
                   </tr>
-                ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

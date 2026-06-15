@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { trilhasService } from '../services';
-import type { Trilha } from '../models';
 
 export default function TrilhasPage() {
-  const [trilhas, setTrilhas] = useState<Trilha[]>([]);
-  const [form, setForm] = useState<Trilha>({ titulo: '', descricao: '', dataInicio: '', dataTermino: '' });
-  const [editId, setEditId] = useState<number | null>(null);
+  const [trilhas, setTrilhas] = useState<any[]>([]);
+  const [form, setForm] = useState<any>({ nome: '', descricao: '', inicio: '', termino: '' });
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    const data = await trilhasService.getAll() as Trilha[];
-    setTrilhas(data);
+    try {
+      const data = await trilhasService.getAll();
+      setTrilhas(data || []);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -20,74 +22,44 @@ export default function TrilhasPage() {
   };
 
   const handleSalvar = async () => {
-    if (!form.titulo.trim()) return alert('Nome obrigatório');
+    if (!form.nome) return alert('Insira o nome da trilha');
     setLoading(true);
     try {
-      if (editId !== null) {
-        await trilhasService.update(editId, { ...form, id: editId });
-      } else {
-        await trilhasService.create(form);
-      }
-      handleLimpar();
+      await trilhasService.create(form);
+      setForm({ nome: '', descricao: '', inicio: '', termino: '' });
       await load();
+    } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLimpar = () => {
-    setForm({ titulo: '', descricao: '', dataInicio: '', dataTermino: '' });
-    setEditId(null);
-  };
-
-  const handleEdit = (t: Trilha) => {
-    setForm(t);
-    setEditId(t.id!);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Excluir esta trilha?')) return;
-    await trilhasService.delete(id);
-    await load();
-  };
-
-  const calcDuracao = (t: Trilha) => {
-    if (!t.dataInicio || !t.dataTermino) return '-';
-    const d1 = new Date(t.dataInicio);
-    const d2 = new Date(t.dataTermino);
-    const diff = Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? `${diff} dias` : '-';
-  };
-
   return (
     <div className="container-fluid px-5 py-4">
       <h2 className="mb-4 fw-semibold">Trilhas</h2>
-
       <div className="card mb-4 shadow-sm">
         <div className="card-body">
-          <h6 className="fw-semibold mb-3">Nova trilha</h6>
+          <h6 className="fw-semibold mb-3">Nova Trilha</h6>
           <div className="row g-3">
             <div className="col-md-6">
               <label className="form-label small fw-medium">Nome</label>
-              <input className="form-control" name="titulo" placeholder="Nome da trilha" value={form.titulo} onChange={handleChange} />
+              <input className="form-control" type="text" name="nome" value={form.nome} onChange={handleChange} />
             </div>
-            <div className="col-md-6">
-              <label className="form-label small fw-medium">Descrição</label>
-              <input className="form-control" name="descricao" placeholder="Descrição" value={form.descricao} onChange={handleChange} />
-            </div>
-            <div className="col-md-6">
+            <div className="col-md-3">
               <label className="form-label small fw-medium">Início</label>
-              <input className="form-control" type="date" name="dataInicio" value={form.dataInicio || ''} onChange={handleChange} />
+              <input className="form-control" type="date" name="inicio" value={form.inicio} onChange={handleChange} />
             </div>
-            <div className="col-md-6">
+            <div className="col-md-3">
               <label className="form-label small fw-medium">Término</label>
-              <input className="form-control" type="date" name="dataTermino" value={form.dataTermino || ''} onChange={handleChange} />
+              <input className="form-control" type="date" name="termino" value={form.termino} onChange={handleChange} />
+            </div>
+            <div className="col-md-12">
+              <label className="form-label small fw-medium">Descrição</label>
+              <textarea className="form-control" name="descricao" value={form.descricao} onChange={handleChange} rows={2} />
             </div>
           </div>
-          <div className="mt-3">
-            <button className="btn btn-primary me-2" onClick={handleSalvar} disabled={loading}>Salvar</button>
-            <button className="btn btn-outline-secondary" onClick={handleLimpar}>Limpar</button>
-          </div>
+          <button className="btn btn-primary mt-3" onClick={handleSalvar} disabled={loading}>Salvar</button>
         </div>
       </div>
 
@@ -96,30 +68,23 @@ export default function TrilhasPage() {
           <table className="table table-hover mb-0">
             <thead className="table-light">
               <tr>
-                <th style={{ width: 60 }}>#</th>
+                <th>#</th>
                 <th>NOME</th>
                 <th>DESCRIÇÃO</th>
-                <th>DURAÇÃO</th>
+                <th>PERÍODO</th>
                 <th>AÇÕES</th>
               </tr>
             </thead>
             <tbody>
-              {trilhas.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-muted fst-italic py-4">Nenhuma trilha cadastrada</td></tr>
-              ) : (
-                trilhas.map((t, i) => (
-                  <tr key={t.id}>
-                    <td>{i + 1}</td>
-                    <td>{t.titulo}</td>
-                    <td>{t.descricao}</td>
-                    <td>{calcDuracao(t)}</td>
-                    <td>
-                      <button className="btn btn-sm btn-outline-primary me-1" onClick={() => handleEdit(t)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(t.id!)}>Excluir</button>
-                    </td>
-                  </tr>
-                ))
-              )}
+              {trilhas.map((t, i) => (
+                <tr key={t.id}>
+                  <td>{i + 1}</td>
+                  <td className="fw-medium">{t.nome}</td>
+                  <td>{t.descricao || '-'}</td>
+                  <td>{t.inicio && t.termino ? `${t.inicio} até ${t.termino}` : '-'}</td>
+                  <td><button className="btn btn-sm btn-outline-danger" onClick={() => trilhasService.delete(t.id).then(load)}>Excluir</button></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
